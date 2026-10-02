@@ -267,8 +267,12 @@ func TestHintGenerators_AlternateHandsAcrossStartupAndReload(t *testing.T) {
 
 		got := generator.LabelsForTesting(labelCount)
 		want := legacy.LabelsForTesting(labelCount)
+
 		if !reflect.DeepEqual(got, want) {
-			t.Errorf("Generator(%s) after disabling alternate hands differs from legacy labels", direction)
+			t.Errorf(
+				"Generator(%s) after disabling alternate hands differs from legacy labels",
+				direction,
+			)
 		}
 	}
 

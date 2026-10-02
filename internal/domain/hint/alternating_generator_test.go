@@ -150,6 +150,7 @@ func TestAlphabetGenerator_AlternatingHands_ManagerFiltersAndSelects(t *testing.
 	}
 
 	manager := hint.NewManager(nil, nil)
+
 	err = manager.SetHints(hint.NewCollection(hints))
 	if err != nil {
 		t.Fatalf("SetHints: %v", err)
@@ -225,7 +226,11 @@ func TestAlphabetGenerator_AlternatingHands_ToggleRestoresConfiguredCharacters(t
 			}
 
 			if got := generator.LabelsForTesting(20); !slices.Equal(got, legacy) {
-				t.Errorf("legacy labels changed after toggling alternation: got %v, want %v", got, legacy)
+				t.Errorf(
+					"legacy labels changed after toggling alternation: got %v, want %v",
+					got,
+					legacy,
+				)
 			}
 		})
 	}
@@ -242,7 +247,13 @@ func assertAlternatingHands(t *testing.T, labels []string) {
 			}
 
 			if !strings.ContainsRune(alphabet, character) {
-				t.Fatalf("label %q has %q at depth %d, want a character from %q", label, character, depth, alphabet)
+				t.Fatalf(
+					"label %q has %q at depth %d, want a character from %q",
+					label,
+					character,
+					depth,
+					alphabet,
+				)
 			}
 		}
 	}
