@@ -179,6 +179,7 @@ func initializeServices(
 			"failed to create hint generator",
 		)
 	}
+	hintGen.UpdateAlternateHands(cfg.Hints.AlternateHands)
 
 	// Vision adapter - vision-based element detection (optional, used on "vision" strategy)
 	visionPort := visionAdapter.NewAdapter(logger)

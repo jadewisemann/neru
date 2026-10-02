@@ -14,6 +14,9 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg == nil {
 		t.Fatal("DefaultConfig() returned nil")
 	}
+	if cfg.Hints.AlternateHands {
+		t.Fatal("Expected Hints.AlternateHands to be false by default")
+	}
 
 	t.Run("Systray Defaults", func(t *testing.T) {
 		if !cfg.Systray.Enabled {

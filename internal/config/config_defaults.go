@@ -447,6 +447,7 @@ func defaultHints() HintsConfig {
 		Strategy:       domain.StrategyAXTree,
 		CaptureScope:   domain.CaptureScopeWindow,
 		HintCharacters: "asdfghjkl",
+		AlternateHands: false, // Keep existing labels unless hand alternation is enabled.
 		LabelDirection: domain.LabelDirectionNormal,
 		MaxDepth:       DefaultMaxDepth,
 		Hotkeys: map[string]StringOrStringArray{

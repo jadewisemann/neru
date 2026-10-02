@@ -6,6 +6,7 @@
 
 [hints]
 enabled = true
+alternate_hands = false                     # Alternate QWERTY left/right hand keys when enabled
 max_depth = 50
 include_menubar_hints = true               # Show hints on menubar
 include_dock_hints = true                  # Show hints on Dock and Mission Control

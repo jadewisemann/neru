@@ -252,6 +252,7 @@ func PlatformSupport() parity.Declaration {
 			"hints.enabled",
 			"hints.strategy",
 			"hints.hint_characters",
+			"hints.alternate_hands",
 			"hints.label_direction",
 			"hints.ui.font_size",
 			"hints.ui.font_family",

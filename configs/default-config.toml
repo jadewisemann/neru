@@ -77,6 +77,7 @@ enabled = true
 strategy = "axtree"                         # axtree, vision, contour
 capture_scope = "window"                    # window, screen
 hint_characters = "asdfghjkl"
+alternate_hands = false                     # Alternate QWERTY left/right hand keys in hint labels
 label_direction = "normal"                  # normal, reverse
 max_depth = 50                              # 0 = unlimited
 include_menubar_hints = false

@@ -26,6 +26,16 @@ const (
 	// is grown as we discover more tiers, so the cap is just an allocation
 	// hint for the common 3-tier case.
 	normalCountsCapacity = 5
+
+	alternatingLeftCharacters  = "QWERTASDFGZXCVB"
+	alternatingRightCharacters = "YUIOPHJKLNM"
+	alternatingCharacters      = alternatingLeftCharacters + alternatingRightCharacters
+	alternatingMaxLabelLength  = 5
+)
+
+var (
+	alternatingLeftAlphabet  = []rune(alternatingLeftCharacters)
+	alternatingRightAlphabet = []rune(alternatingRightCharacters)
 )
 
 // LabelDirection determines how multi-character hint labels are enumerated
@@ -113,7 +123,7 @@ var stringBuilderPool = sync.Pool{
 //
 // Two label directions are supported:
 //
-//   - LabelDirectionReverse emits fixed-length base-N labels so labels within
+//   - LabelDirectionReverse emits fixed-length labels so labels within
 //     a tier are interleaved (e.g. "AAA", "BAA", "CAA").
 //   - LabelDirectionNormal (default) uses a prefix-avoidance greedy
 //     algorithm so shorter labels are preferred (e.g. "AAA", "AAB", "AAC").
@@ -123,6 +133,7 @@ type AlphabetGenerator struct {
 	maxHints         int
 	uppercaseRuneMap map[rune]rune
 	labelDirection   LabelDirection
+	alternateHands   bool
 }
 
 // NewAlphabetGenerator creates a new alphabet-based hint generator.
@@ -256,6 +267,10 @@ func (g *AlphabetGenerator) MaxHints() int {
 
 // Characters returns the character set used for hint generation.
 func (g *AlphabetGenerator) Characters() string {
+	if g.alternateHands {
+		return alternatingCharacters
+	}
+
 	return g.characters
 }
 
@@ -283,6 +298,42 @@ func (g *AlphabetGenerator) UpdateCharacters(characters string) error {
 // direction change simply misses the cache and recomputes lazily.
 func (g *AlphabetGenerator) UpdateLabelDirection(direction LabelDirection) {
 	g.labelDirection = direction
+}
+
+// UpdateAlternateHands selects a left-hand alphabet at even character depths
+// and a right-hand alphabet at odd depths. Disabling it restores the configured
+// hint character set and the original three-character capacity.
+func (g *AlphabetGenerator) UpdateAlternateHands(enabled bool) {
+	g.alternateHands = enabled
+	if !enabled {
+		n := len(g.uppercaseChars)
+		g.maxHints = n * n * n
+
+		return
+	}
+
+	g.maxHints = 1
+	for depth := range alternatingMaxLabelLength {
+		g.maxHints *= len(g.alphabetForDepth(depth, nil))
+	}
+
+	for _, char := range alternatingCharacters {
+		if _, ok := singleCharCache.Load(char); !ok {
+			singleCharCache.Store(char, string(char))
+		}
+	}
+}
+
+func (g *AlphabetGenerator) alphabetForDepth(depth int, configured []rune) []rune {
+	if !g.alternateHands {
+		return configured
+	}
+
+	if depth%2 == 0 {
+		return alternatingLeftAlphabet
+	}
+
+	return alternatingRightAlphabet
 }
 
 // Update replaces both the character set and label direction in a single
@@ -338,6 +389,9 @@ func (g *AlphabetGenerator) Update(characters string, direction LabelDirection) 
 	g.maxHints = maxHints
 	g.uppercaseRuneMap = uppercaseRuneMap
 	g.labelDirection = direction
+	if g.alternateHands {
+		g.UpdateAlternateHands(true)
+	}
 
 	// Pre-cache single character strings
 	for _, r := range g.uppercaseChars {
@@ -349,17 +403,20 @@ func (g *AlphabetGenerator) Update(characters string, direction LabelDirection) 
 	return nil
 }
 
-// generateLabels generates fixed-length base-N alphabet labels.
-// For counts up to the alphabet size, returns single characters.
-// For larger counts, progressively generates 2-char, 3-char, etc. labels to satisfy the count.
+// generateLabels generates labels using the configured alphabet at each depth.
+// For counts up to the first alphabet size, it returns single characters.
+// For larger counts, it progressively uses longer labels to satisfy the count.
 // Results are cached in a bounded LRU cache for instant reuse on repeated counts.
-// The cache key includes the label direction so the two strategies never collide.
+// The cache key includes the label direction and alternating-hand setting.
 func (g *AlphabetGenerator) generateLabels(count int) []string {
 	if count == 0 {
 		return nil
 	}
 
 	cacheKey := g.uppercaseChars + ":" + g.labelDirection.String() + ":" + strconv.Itoa(count)
+	if g.alternateHands {
+		cacheKey += ":alternate"
+	}
 
 	labelCacheMu.Lock()
 	if entry, ok := labelCache[cacheKey]; ok {
@@ -417,7 +474,7 @@ func (g *AlphabetGenerator) generateLabels(count int) []string {
 // label direction.
 func (g *AlphabetGenerator) computeLabels(count int) []string {
 	chars := []rune(g.uppercaseChars)
-	numChars := len(chars)
+	numChars := len(g.alphabetForDepth(0, chars))
 	labels := make([]string, 0, count)
 
 	if g.labelDirection == LabelDirectionReverse {
@@ -427,19 +484,18 @@ func (g *AlphabetGenerator) computeLabels(count int) []string {
 	return g.computeLabelsNormal(count, chars, numChars, labels)
 }
 
-// computeLabelsReverse emits fixed-length base-N labels so labels within a
-// tier are interleaved. For counts up to the alphabet size it returns single
-// characters; for larger counts it emits uniformly 2-char or 3-char labels
-// depending on the bucket. Labels look like "AAA", "BAA", "CAA", ...
+// computeLabelsReverse emits fixed-length labels so labels within a tier are
+// interleaved. It uses the alphabet at each depth as that digit's radix.
 func (g *AlphabetGenerator) computeLabelsReverse(
 	count int,
 	chars []rune,
 	numChars int,
 	labels []string,
 ) []string {
+	firstChars := g.alphabetForDepth(0, chars)
 	if count <= numChars {
 		for i := range count {
-			char := chars[i]
+			char := firstChars[i]
 			if cached, ok := singleCharCache.Load(char); ok {
 				if str, ok := cached.(string); ok {
 					labels = append(labels, str)
@@ -454,9 +510,11 @@ func (g *AlphabetGenerator) computeLabelsReverse(
 		return labels
 	}
 
-	length := 2
-	if count > numChars*numChars {
-		length = 3
+	length := 1
+	capacity := numChars
+	for capacity < count {
+		capacity *= len(g.alphabetForDepth(length, chars))
+		length++
 	}
 
 	for index := range count {
@@ -469,11 +527,12 @@ func (g *AlphabetGenerator) computeLabelsReverse(
 		stringBuilder.Grow(length)
 
 		v := index
-		for range length {
-			digit := v % numChars
-			v /= numChars
+		for depth := range length {
+			alphabet := g.alphabetForDepth(depth, chars)
+			digit := v % len(alphabet)
+			v /= len(alphabet)
 
-			stringBuilder.WriteRune(chars[digit])
+			stringBuilder.WriteRune(alphabet[digit])
 		}
 
 		labels = append(labels, stringBuilder.String())
@@ -503,8 +562,9 @@ func (g *AlphabetGenerator) computeLabelsNormal(
 	availableSlots := numChars // slots available at current level (length 1)
 
 	for remainingTarget > 0 {
+		nextNumChars := len(g.alphabetForDepth(len(counts)+1, chars))
 		// Capacity if all current slots are expanded to the next level.
-		nextLevelCapacity := availableSlots * numChars
+		nextLevelCapacity := availableSlots * nextNumChars
 
 		var keep int
 
@@ -520,14 +580,14 @@ func (g *AlphabetGenerator) computeLabelsNormal(
 			// level can still cover the remainder.
 			//
 			// Formula derived from: availableSlots*N - keep*(N-1) >= remainingTarget
-			keep = (availableSlots*numChars - remainingTarget) / (numChars - 1)
+			keep = (nextLevelCapacity - remainingTarget) / (nextNumChars - 1)
 		}
 
 		counts = append(counts, keep)
 		remainingTarget -= keep
 
 		// Remaining slots expanded by the branching factor feed the next level.
-		availableSlots = (availableSlots - keep) * numChars
+		availableSlots = (availableSlots - keep) * nextNumChars
 
 		if availableSlots == 0 && remainingTarget > 0 {
 			// Should not happen if the MaxHints check passed at construction.
@@ -539,10 +599,11 @@ func (g *AlphabetGenerator) computeLabelsNormal(
 
 	for level, keep := range counts {
 		length := level + 1
+		alphabet := g.alphabetForDepth(level, chars)
 
 		if length == 1 {
 			for i := range keep {
-				char := chars[i]
+				char := alphabet[i]
 				if cached, ok := singleCharCache.Load(char); ok {
 					if str, ok := cached.(string); ok {
 						labels = append(labels, str)
@@ -557,7 +618,7 @@ func (g *AlphabetGenerator) computeLabelsNormal(
 			// Next level starts immediately after the kept labels.
 			current = []int{keep}
 		} else {
-			// Expand prefixes: `current` is the running base-N cursor.
+			// Expand prefixes: `current` is the running mixed-radix cursor.
 			for len(current) < length {
 				current = append(current, 0)
 			}
@@ -571,17 +632,17 @@ func (g *AlphabetGenerator) computeLabelsNormal(
 				stringBuilder.Reset()
 				stringBuilder.Grow(length)
 
-				for _, index := range current {
-					stringBuilder.WriteRune(chars[index])
+				for depth, index := range current {
+					stringBuilder.WriteRune(g.alphabetForDepth(depth, chars)[index])
 				}
 
 				labels = append(labels, stringBuilder.String())
 				stringBuilderPool.Put(stringBuilder)
 
-				// Increment cursor like adding 1 in base-N.
+				// Increment the cursor using each depth's alphabet size.
 				for pos := range slices.Backward(current) {
 					current[pos]++
-					if current[pos] < numChars {
+					if current[pos] < len(g.alphabetForDepth(pos, chars)) {
 						break
 					}
 

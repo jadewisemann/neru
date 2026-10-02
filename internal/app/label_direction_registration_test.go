@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"reflect"
+	"strings"
 	"testing"
 
 	"go.uber.org/zap"
@@ -208,5 +210,104 @@ func TestRegisterOppositeLabelDirectionGenerator_FixesUserBugScenario(t *testing
 			gotReverse.LabelDirection(),
 			hint.LabelDirectionReverse,
 		)
+	}
+}
+
+func TestHintGenerators_AlternateHandsAcrossStartupAndReload(t *testing.T) {
+	const labelCount = 200
+
+	cfg := config.DefaultConfig()
+	cfg.Hints.AlternateHands = true
+
+	hintService, _, _, _, _, err := initializeServices(
+		cfg,
+		&mocks.MockAccessibilityPort{},
+		&mocks.MockOverlayPort{},
+		&mocks.MockSystemPort{},
+		zap.NewNop(),
+	)
+	if err != nil {
+		t.Fatalf("initializeServices() error: %v", err)
+	}
+
+	app := &App{
+		ctx:         context.Background(),
+		logger:      zap.NewNop(),
+		hintService: hintService,
+	}
+	registerOppositeLabelDirectionGenerator(app, hintService, cfg)
+
+	for _, direction := range []hint.LabelDirection{hint.LabelDirectionNormal, hint.LabelDirectionReverse} {
+		generator, ok := hintService.Generator(direction.String()).(*hint.AlphabetGenerator)
+		if !ok {
+			t.Fatalf("Generator(%s) is not an alphabet generator", direction)
+		}
+
+		assertAlternatingHintLabels(t, generator.LabelsForTesting(labelCount), labelCount)
+	}
+
+	cfg.Hints.AlternateHands = false
+	app.updateServiceConfigs(cfg)
+
+	for _, direction := range []hint.LabelDirection{hint.LabelDirectionNormal, hint.LabelDirectionReverse} {
+		generator, ok := hintService.Generator(direction.String()).(*hint.AlphabetGenerator)
+		if !ok {
+			t.Fatalf("Generator(%s) after reload is not an alphabet generator", direction)
+		}
+
+		legacy, legacyErr := hint.NewAlphabetGenerator(cfg.Hints.HintCharacters, direction)
+		if legacyErr != nil {
+			t.Fatalf("NewAlphabetGenerator(%s) error: %v", direction, legacyErr)
+		}
+
+		if got, want := generator.LabelsForTesting(labelCount), legacy.LabelsForTesting(labelCount); !reflect.DeepEqual(got, want) {
+			t.Errorf("Generator(%s) after disabling alternate hands differs from legacy labels", direction)
+		}
+	}
+
+	cfg.Hints.AlternateHands = true
+	app.updateServiceConfigs(cfg)
+
+	for _, direction := range []hint.LabelDirection{hint.LabelDirectionNormal, hint.LabelDirectionReverse} {
+		generator, ok := hintService.Generator(direction.String()).(*hint.AlphabetGenerator)
+		if !ok {
+			t.Fatalf("Generator(%s) after re-enabling is not an alphabet generator", direction)
+		}
+
+		assertAlternatingHintLabels(t, generator.LabelsForTesting(labelCount), labelCount)
+	}
+}
+
+func assertAlternatingHintLabels(t *testing.T, labels []string, wantCount int) {
+	t.Helper()
+
+	if len(labels) != wantCount {
+		t.Fatalf("got %d labels, want %d", len(labels), wantCount)
+	}
+
+	const left = "qwertasdfgzxcvb"
+	const right = "yuiophjklnm"
+
+	seenThreeCharacters := false
+	for _, label := range labels {
+		characters := []rune(strings.ToLower(label))
+		if len(characters) >= 3 {
+			seenThreeCharacters = true
+		}
+
+		for depth, character := range characters {
+			alphabet := left
+			if depth%2 == 1 {
+				alphabet = right
+			}
+
+			if !strings.ContainsRune(alphabet, character) {
+				t.Errorf("label %q has invalid character %q at depth %d", label, character, depth)
+			}
+		}
+	}
+
+	if !seenThreeCharacters {
+		t.Error("expected labels to extend to at least three characters")
 	}
 }
