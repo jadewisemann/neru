@@ -178,6 +178,7 @@ func registerOppositeLabelDirectionGenerator(
 
 		return
 	}
+	oppositeGen.UpdateAlternateHands(cfg.Hints.AlternateHands)
 
 	hintService.UpdateGenerator(app.ctx, oppositeGen)
 
