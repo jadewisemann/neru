@@ -219,7 +219,7 @@ func TestHintGenerators_AlternateHandsAcrossStartupAndReload(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Hints.AlternateHands = true
 
-	hintService, _, _, _, _, err := initializeServices(
+	hintService, gridService, actionService, scrollService, indicators, err := initializeServices(
 		cfg,
 		&mocks.MockAccessibilityPort{},
 		&mocks.MockOverlayPort{},
@@ -228,6 +228,11 @@ func TestHintGenerators_AlternateHandsAcrossStartupAndReload(t *testing.T) {
 	)
 	if err != nil {
 		t.Fatalf("initializeServices() error: %v", err)
+	}
+
+	if gridService == nil || actionService == nil || scrollService == nil ||
+		indicators.mode == nil || indicators.sticky == nil || indicators.virtualPointer == nil {
+		t.Fatal("initializeServices() returned an incomplete service set")
 	}
 
 	app := &App{
@@ -260,7 +265,9 @@ func TestHintGenerators_AlternateHandsAcrossStartupAndReload(t *testing.T) {
 			t.Fatalf("NewAlphabetGenerator(%s) error: %v", direction, legacyErr)
 		}
 
-		if got, want := generator.LabelsForTesting(labelCount), legacy.LabelsForTesting(labelCount); !reflect.DeepEqual(got, want) {
+		got := generator.LabelsForTesting(labelCount)
+		want := legacy.LabelsForTesting(labelCount)
+		if !reflect.DeepEqual(got, want) {
 			t.Errorf("Generator(%s) after disabling alternate hands differs from legacy labels", direction)
 		}
 	}
@@ -285,8 +292,10 @@ func assertAlternatingHintLabels(t *testing.T, labels []string, wantCount int) {
 		t.Fatalf("got %d labels, want %d", len(labels), wantCount)
 	}
 
-	const left = "qwertasdfgzxcvb"
-	const right = "yuiophjklnm"
+	const (
+		left  = "qwertasdfgzxcvb"
+		right = "yuiophjklnm"
+	)
 
 	seenThreeCharacters := false
 	for _, label := range labels {

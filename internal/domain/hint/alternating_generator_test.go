@@ -58,6 +58,7 @@ func TestAlphabetGenerator_AlternatingHands_LabelsAtEveryDepth(t *testing.T) {
 						break
 					}
 				}
+
 				if !found {
 					t.Errorf("no %d-character label generated", testCase.length)
 				}
@@ -75,19 +76,20 @@ func TestAlphabetGenerator_AlternatingHands_GeneratesManyTargets(t *testing.T) {
 	}
 
 	generator.UpdateAlternateHands(true)
+
 	if generator.MaxHints() < targetCount {
 		t.Fatalf("MaxHints() = %d, want at least %d", generator.MaxHints(), targetCount)
 	}
 
 	elements := make([]*element.Element, targetCount)
-	for i := range elements {
-		elements[i], err = element.NewElement(
-			element.ID(strconv.Itoa(i)),
-			image.Rect(i, 0, i+1, 1),
+	for index := range elements {
+		elements[index], err = element.NewElement(
+			element.ID(strconv.Itoa(index)),
+			image.Rect(index, 0, index+1, 1),
 			element.RoleButton,
 		)
 		if err != nil {
-			t.Fatalf("NewElement(%d): %v", i, err)
+			t.Fatalf("NewElement(%d): %v", index, err)
 		}
 	}
 
@@ -95,6 +97,7 @@ func TestAlphabetGenerator_AlternatingHands_GeneratesManyTargets(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
+
 	if len(hints) != targetCount {
 		t.Fatalf("Generate returned %d hints, want %d", len(hints), targetCount)
 	}
@@ -103,6 +106,7 @@ func TestAlphabetGenerator_AlternatingHands_GeneratesManyTargets(t *testing.T) {
 	for i, generated := range hints {
 		labels[i] = generated.Label()
 	}
+
 	assertLabelsUniqueAndPrefixFree(t, labels)
 	assertAlternatingHands(t, labels)
 }
@@ -112,19 +116,21 @@ func TestAlphabetGenerator_AlternatingHands_ManagerFiltersAndSelects(t *testing.
 	if err != nil {
 		t.Fatalf("NewAlphabetGenerator: %v", err)
 	}
+
 	generator.UpdateAlternateHands(true)
 
 	elements := make([]*element.Element, 16)
-	for i := range elements {
-		elements[i], err = element.NewElement(
-			element.ID(strconv.Itoa(i)),
-			image.Rect(i, 0, i+1, 1),
+	for index := range elements {
+		elements[index], err = element.NewElement(
+			element.ID(strconv.Itoa(index)),
+			image.Rect(index, 0, index+1, 1),
 			element.RoleButton,
 		)
 		if err != nil {
-			t.Fatalf("NewElement(%d): %v", i, err)
+			t.Fatalf("NewElement(%d): %v", index, err)
 		}
 	}
+
 	hints, err := generator.Generate(context.Background(), elements)
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
@@ -138,29 +144,39 @@ func TestAlphabetGenerator_AlternatingHands_ManagerFiltersAndSelects(t *testing.
 			break
 		}
 	}
+
 	if label == "" {
 		t.Fatal("expected a two-character label")
 	}
 
 	manager := hint.NewManager(nil, nil)
-	if err := manager.SetHints(hint.NewCollection(hints)); err != nil {
+	err = manager.SetHints(hint.NewCollection(hints))
+	if err != nil {
 		t.Fatalf("SetHints: %v", err)
 	}
+
 	match, found, _, err := manager.HandleInput(strings.ToLower(label[:1]))
 	if err != nil {
 		t.Fatalf("HandleInput first character: %v", err)
 	}
+
 	if found || match != nil {
 		t.Fatalf("selected %v after only the first character of %q", match, label)
 	}
+
 	if filtered := manager.FilteredHints(); len(filtered) != 2 {
-		t.Errorf("FilteredHints() returned %d hints after prefix %q, want 2", len(filtered), label[:1])
+		t.Errorf(
+			"FilteredHints() returned %d hints after prefix %q, want 2",
+			len(filtered),
+			label[:1],
+		)
 	}
 
 	match, found, _, err = manager.HandleInput(strings.ToLower(label[1:]))
 	if err != nil {
 		t.Fatalf("HandleInput second character: %v", err)
 	}
+
 	if !found || match == nil || match.Label() != label {
 		t.Errorf("selected %v after typing %q, want that exact hint", match, label)
 	}
@@ -179,28 +195,35 @@ func TestAlphabetGenerator_AlternatingHands_ToggleRestoresConfiguredCharacters(t
 
 			legacy := slices.Clone(generator.LabelsForTesting(20))
 			generator.UpdateAlternateHands(true)
+
 			if got := generator.Characters(); got != leftHandCharacters+rightHandCharacters {
 				t.Errorf("Characters() = %q with alternation enabled", got)
 			}
 
 			assertAlternatingHands(t, generator.LabelsForTesting(20))
 
-			if err := generator.UpdateCharacters("xyz"); err != nil {
+			err = generator.UpdateCharacters("xyz")
+			if err != nil {
 				t.Fatalf("UpdateCharacters: %v", err)
 			}
+
 			assertAlternatingHands(t, generator.LabelsForTesting(20))
 
 			generator.UpdateAlternateHands(false)
+
 			if got := generator.Characters(); got != "XYZ" {
 				t.Errorf("Characters() = %q after disabling alternation, want XYZ", got)
 			}
+
 			if got := generator.MaxHints(); got != 27 {
 				t.Errorf("MaxHints() = %d after disabling alternation, want 27", got)
 			}
 
-			if err := generator.UpdateCharacters("abcd"); err != nil {
+			err = generator.UpdateCharacters("abcd")
+			if err != nil {
 				t.Fatalf("UpdateCharacters: %v", err)
 			}
+
 			if got := generator.LabelsForTesting(20); !slices.Equal(got, legacy) {
 				t.Errorf("legacy labels changed after toggling alternation: got %v, want %v", got, legacy)
 			}
@@ -217,6 +240,7 @@ func assertAlternatingHands(t *testing.T, labels []string) {
 			if depth%2 == 1 {
 				alphabet = rightHandCharacters
 			}
+
 			if !strings.ContainsRune(alphabet, character) {
 				t.Fatalf("label %q has %q at depth %d, want a character from %q", label, character, depth, alphabet)
 			}

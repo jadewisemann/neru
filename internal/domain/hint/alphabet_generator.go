@@ -324,18 +324,6 @@ func (g *AlphabetGenerator) UpdateAlternateHands(enabled bool) {
 	}
 }
 
-func (g *AlphabetGenerator) alphabetForDepth(depth int, configured []rune) []rune {
-	if !g.alternateHands {
-		return configured
-	}
-
-	if depth%2 == 0 {
-		return alternatingLeftAlphabet
-	}
-
-	return alternatingRightAlphabet
-}
-
 // Update replaces both the character set and label direction in a single
 // call. Callers that only need to change one field should prefer
 // UpdateCharacters or UpdateLabelDirection so the intent is explicit.
@@ -389,6 +377,7 @@ func (g *AlphabetGenerator) Update(characters string, direction LabelDirection) 
 	g.maxHints = maxHints
 	g.uppercaseRuneMap = uppercaseRuneMap
 	g.labelDirection = direction
+
 	if g.alternateHands {
 		g.UpdateAlternateHands(true)
 	}
@@ -401,6 +390,18 @@ func (g *AlphabetGenerator) Update(characters string, direction LabelDirection) 
 	}
 
 	return nil
+}
+
+func (g *AlphabetGenerator) alphabetForDepth(depth int, configured []rune) []rune {
+	if !g.alternateHands {
+		return configured
+	}
+
+	if depth%2 == 0 {
+		return alternatingLeftAlphabet
+	}
+
+	return alternatingRightAlphabet
 }
 
 // generateLabels generates labels using the configured alphabet at each depth.
@@ -512,6 +513,7 @@ func (g *AlphabetGenerator) computeLabelsReverse(
 
 	length := 1
 	capacity := numChars
+
 	for capacity < count {
 		capacity *= len(g.alphabetForDepth(length, chars))
 		length++
