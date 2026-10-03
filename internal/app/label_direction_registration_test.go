@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"image"
 	"reflect"
 	"strings"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"github.com/y3owk1n/neru/internal/adapter/logger"
 	"github.com/y3owk1n/neru/internal/app/services"
 	"github.com/y3owk1n/neru/internal/config"
+	"github.com/y3owk1n/neru/internal/domain/element"
 	"github.com/y3owk1n/neru/internal/domain/hint"
 	"github.com/y3owk1n/neru/internal/ports/mocks"
 )
@@ -252,6 +254,9 @@ func TestHintGenerators_AlternateHandsAcrossStartupAndReload(t *testing.T) {
 	}
 
 	cfg.Hints.AlternateHands = false
+	cfg.Hints.FirstHand = config.FirstHandBoth
+	cfg.Hints.AllowRepeatedKeys = true
+	cfg.Hints.LabelOrder = config.LabelOrderLengthFirst
 	app.updateServiceConfigs(cfg)
 
 	for _, direction := range []hint.LabelDirection{hint.LabelDirectionNormal, hint.LabelDirectionReverse} {
@@ -277,6 +282,8 @@ func TestHintGenerators_AlternateHandsAcrossStartupAndReload(t *testing.T) {
 	}
 
 	cfg.Hints.AlternateHands = true
+	cfg.Hints.FirstHand = config.FirstHandLeft
+	cfg.Hints.AllowRepeatedKeys = false
 	app.updateServiceConfigs(cfg)
 
 	for _, direction := range []hint.LabelDirection{hint.LabelDirectionNormal, hint.LabelDirectionReverse} {
@@ -297,8 +304,8 @@ func assertAlternatingHintLabels(t *testing.T, labels []string, wantCount int) {
 	}
 
 	const (
-		left  = "qwertasdfgzxcvb"
-		right = "yuiophjklnm"
+		left  = "asdfzxcvwerg"
+		right = "jklpuionm,.h"
 	)
 
 	seenThreeCharacters := false
@@ -322,5 +329,199 @@ func assertAlternatingHintLabels(t *testing.T, labels []string, wantCount int) {
 
 	if !seenThreeCharacters {
 		t.Error("expected labels to extend to at least three characters")
+	}
+}
+
+func TestHintGenerators_HandOptionsAcrossStartupAndReload(t *testing.T) {
+	const labelCount = 200
+
+	tests := []struct {
+		name      string
+		alternate bool
+		firstHand string
+		repeated  bool
+		order     string
+	}{
+		{"left alternating", true, config.FirstHandLeft, false, config.LabelOrderLengthFirst},
+		{
+			"right alternating ignores repeats",
+			true,
+			config.FirstHandRight,
+			true,
+			config.LabelOrderPriorityFirst,
+		},
+		{"both alternating", true, config.FirstHandBoth, false, config.LabelOrderLengthFirst},
+		{"left unrestricted", false, config.FirstHandLeft, true, config.LabelOrderPriorityFirst},
+		{
+			"right without repeats",
+			false,
+			config.FirstHandRight,
+			false,
+			config.LabelOrderLengthFirst,
+		},
+		{
+			"both without repeats",
+			false,
+			config.FirstHandBoth,
+			false,
+			config.LabelOrderPriorityFirst,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			cfg := config.DefaultConfig()
+			cfg.Hints.AlternateHands = testCase.alternate
+			cfg.Hints.FirstHand = testCase.firstHand
+			cfg.Hints.AllowRepeatedKeys = testCase.repeated
+			cfg.Hints.LabelOrder = testCase.order
+
+			hintService, _, _, _, _, err := initializeServices(
+				cfg,
+				&mocks.MockAccessibilityPort{},
+				&mocks.MockOverlayPort{},
+				&mocks.MockSystemPort{},
+				zap.NewNop(),
+			)
+			if err != nil {
+				t.Fatalf("initializeServices() error: %v", err)
+			}
+
+			app := &App{
+				ctx:         context.Background(),
+				logger:      zap.NewNop(),
+				hintService: hintService,
+			}
+			registerOppositeLabelDirectionGenerator(app, hintService, cfg)
+			assertHintGeneratorOptions(t, hintService, cfg.Hints, labelCount)
+
+			cfg.Hints.FirstHand = config.FirstHandLeft
+			if testCase.firstHand == config.FirstHandLeft {
+				cfg.Hints.FirstHand = config.FirstHandRight
+			}
+
+			cfg.Hints.AlternateHands = !testCase.alternate
+			cfg.Hints.AllowRepeatedKeys = !testCase.repeated
+			cfg.Hints.LabelOrder = config.LabelOrderPriorityFirst
+
+			if testCase.order == config.LabelOrderPriorityFirst {
+				cfg.Hints.LabelOrder = config.LabelOrderLengthFirst
+			}
+
+			app.updateServiceConfigs(cfg)
+			assertHintGeneratorOptions(t, hintService, cfg.Hints, labelCount)
+		})
+	}
+}
+
+func assertHintGeneratorOptions(
+	t *testing.T,
+	hintService *services.HintService,
+	cfg config.HintsConfig,
+	labelCount int,
+) {
+	t.Helper()
+
+	for _, direction := range []hint.LabelDirection{hint.LabelDirectionNormal, hint.LabelDirectionReverse} {
+		generator, ok := hintService.Generator(direction.String()).(*hint.AlphabetGenerator)
+		if !ok {
+			t.Fatalf("Generator(%s) is not an alphabet generator", direction)
+		}
+
+		labels := generator.LabelsForTesting(labelCount)
+		if len(labels) != labelCount {
+			t.Fatalf(
+				"Generator(%s) returned %d labels, want %d",
+				direction,
+				len(labels),
+				labelCount,
+			)
+		}
+
+		configured, err := newHintGenerator(cfg, direction)
+		if err != nil {
+			t.Fatalf("newHintGenerator(%s) error: %v", direction, err)
+		}
+
+		if !reflect.DeepEqual(labels, configured.LabelsForTesting(labelCount)) {
+			t.Errorf("Generator(%s) does not reflect the current hand options", direction)
+		}
+
+		for _, label := range labels {
+			characters := []rune(strings.ToLower(label))
+			firstLeft := strings.ContainsRune("asdfzxcvwerg", characters[0])
+
+			if cfg.FirstHand == config.FirstHandLeft && !firstLeft ||
+				cfg.FirstHand == config.FirstHandRight && firstLeft {
+				t.Errorf(
+					"label %q does not start with the configured hand %q",
+					label,
+					cfg.FirstHand,
+				)
+			}
+
+			for depth := 1; depth < len(characters); depth++ {
+				if !cfg.AllowRepeatedKeys && characters[depth] == characters[depth-1] {
+					t.Errorf("label %q repeats the same key at depth %d", label, depth)
+				}
+
+				if cfg.AlternateHands {
+					previousLeft := strings.ContainsRune("asdfzxcvwerg", characters[depth-1])
+					currentLeft := strings.ContainsRune("asdfzxcvwerg", characters[depth])
+
+					if previousLeft == currentLeft {
+						t.Errorf("label %q repeats the same hand at depth %d", label, depth)
+					}
+				}
+			}
+		}
+	}
+}
+
+func TestHintGenerators_RightHandPunctuationCanBeSelected(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Hints.FirstHand = config.FirstHandRight
+
+	generator, err := newHintGenerator(cfg.Hints, hint.LabelDirectionNormal)
+	if err != nil {
+		t.Fatalf("newHintGenerator() error: %v", err)
+	}
+
+	elem, err := element.NewElement("button", image.Rect(0, 0, 20, 20), element.RoleButton)
+	if err != nil {
+		t.Fatalf("NewElement() error: %v", err)
+	}
+
+	elements := make([]*element.Element, 12)
+	for index := range elements {
+		elements[index] = elem
+	}
+
+	hints, err := generator.Generate(context.Background(), elements)
+	if err != nil {
+		t.Fatalf("Generate() error: %v", err)
+	}
+
+	manager := hint.NewManager(zap.NewNop(), nil)
+
+	err = manager.SetHints(hint.NewCollection(hints))
+	if err != nil {
+		t.Fatalf("SetHints() error: %v", err)
+	}
+
+	for _, key := range []string{",", "."} {
+		err = manager.Reset()
+		if err != nil {
+			t.Fatalf("Reset() error: %v", err)
+		}
+
+		matched, complete, _, inputErr := manager.HandleInput(key)
+		if inputErr != nil {
+			t.Fatalf("HandleInput(%q) error: %v", key, inputErr)
+		}
+
+		if !complete || matched == nil || matched.Label() != key {
+			t.Errorf("HandleInput(%q) did not select its punctuation hint", key)
+		}
 	}
 }

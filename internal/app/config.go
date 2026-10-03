@@ -180,14 +180,13 @@ func (a *App) updateServiceConfigs(cfg *config.Config) {
 	if a.hintService != nil {
 		a.hintService.UpdateConfig(cfg.Hints)
 
-		newGen, genErr := domainHint.NewAlphabetGenerator(
-			cfg.Hints.HintCharacters,
+		newGen, genErr := newHintGenerator(
+			cfg.Hints,
 			domainHint.LabelDirectionFromString(cfg.Hints.LabelDirectionForApp("")),
 		)
 		if genErr != nil {
 			a.logger.Error("Failed to create hint generator during reload", zap.Error(genErr))
 		} else {
-			newGen.UpdateAlternateHands(cfg.Hints.AlternateHands)
 			a.hintService.UpdateGenerator(a.ctx, newGen)
 		}
 

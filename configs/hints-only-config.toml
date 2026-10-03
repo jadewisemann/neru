@@ -6,7 +6,11 @@
 
 [hints]
 enabled = true
-alternate_hands = false                     # Alternate QWERTY left/right hand keys when enabled
+hint_characters = "asdfzxcvwergjklpuionm,.h"
+alternate_hands = true                     # Alternate left/right hands on every character
+first_hand = "left"                        # left, right, both
+allow_repeated_keys = false                # Allow AA; ignored when alternate_hands is true
+label_order = "length_first"               # length_first, priority_first
 max_depth = 50
 include_menubar_hints = true               # Show hints on menubar
 include_dock_hints = true                  # Show hints on Dock and Mission Control

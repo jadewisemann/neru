@@ -168,8 +168,8 @@ func initializeServices(
 	logger *zap.Logger,
 ) (*services.HintService, *services.GridService, *services.ActionService, *services.ScrollService, indicatorServices, error) {
 	// Hint Generator - creates unique labels for UI elements
-	hintGen, hintGenErr := domainHint.NewAlphabetGenerator(
-		cfg.Hints.HintCharacters,
+	hintGen, hintGenErr := newHintGenerator(
+		cfg.Hints,
 		domainHint.LabelDirectionFromString(cfg.Hints.LabelDirectionForApp("")),
 	)
 	if hintGenErr != nil {
@@ -179,8 +179,6 @@ func initializeServices(
 			"failed to create hint generator",
 		)
 	}
-
-	hintGen.UpdateAlternateHands(cfg.Hints.AlternateHands)
 
 	// Vision adapter - vision-based element detection (optional, used on "vision" strategy)
 	visionPort := visionAdapter.NewAdapter(logger)
@@ -220,6 +218,33 @@ func initializeServices(
 	indicators := newIndicatorServices(overlayAdapter, systemPort)
 
 	return hintService, gridService, actionService, scrollService, indicators, nil
+}
+
+// newHintGenerator applies the same label policy to startup, reload, and overrides.
+func newHintGenerator(
+	cfg config.HintsConfig,
+	direction domainHint.LabelDirection,
+) (*domainHint.AlphabetGenerator, error) {
+	generator, err := domainHint.NewAlphabetGenerator(cfg.HintCharacters, direction)
+	if err != nil {
+		return nil, err
+	}
+
+	err = generator.UpdateHandOptions(domainHint.HandOptions{
+		AlternateHands:    cfg.AlternateHands,
+		FirstHand:         cfg.FirstHand,
+		AllowRepeatedKeys: cfg.AllowRepeatedKeys,
+		LabelOrder:        cfg.LabelOrder,
+	})
+	if err != nil {
+		return nil, derrors.Wrap(
+			err,
+			derrors.CodeHintGenerationFailed,
+			"failed to configure hint generator",
+		)
+	}
+
+	return generator, nil
 }
 
 // processHotkeyBindings processes and filters hotkey bindings from configuration.

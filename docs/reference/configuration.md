@@ -323,7 +323,10 @@ Press `/` in hints mode to filter hints by text. See the
 
 ```toml
 [hints]
-hint_characters = "asdfghjkl"
+alternate_hands = true
+first_hand = "left"
+allow_repeated_keys = false
+label_order = "length_first"
 strategy = "vision"
 
 [hints.ui]
@@ -337,8 +340,11 @@ font_size = 12
 | `enabled`                          | bool         | `true`                   | Turn hints mode on or off                                                                                                                                  |
 | `strategy`                         | string       | `"axtree"`               | Element detection: `"axtree"`, `"vision"` or `"contour"`. Overridable per app                                                                              |
 | `capture_scope`                    | string       | `"window"`               | Region `vision` and `contour` scan: `"window"` (the screen if nothing is focused) or `"screen"`. Overridable per app and with `neru hints --capture-scope` |
-| `hint_characters`                  | string       | `"asdfghjkl"`            | Characters used for labels                                                                                                                                 |
-| `alternate_hands`                  | bool         | `false`                  | Generate labels with alternating QWERTY left and right hand keys, starting on the left. When enabled, the fixed hand groups replace `hint_characters` for labels. |
+| `hint_characters`                  | string       | `"asdfzxcvwergjklpuionm,.h"` | Characters used when `alternate_hands` is `false`; matching ignores case. |
+| `alternate_hands`                  | bool         | `true`                   | Alternate QWERTY hands on every character using the key groups below. |
+| `first_hand`                       | string       | `"left"`                 | `"left"` or `"right"` restricts every label's first character to that hand; `"both"` permits either hand. Applies with alternation on or off. |
+| `allow_repeated_keys`              | bool         | `false`                  | Allow consecutive copies of the same key, such as `AA`. Ignored when `alternate_hands` is `true`, since alternation already prevents repeats. |
+| `label_order`                      | string       | `"length_first"`         | `"length_first"` favors fewer keystrokes; `"priority_first"` favors primary starting keys, expanding them before using secondary starting keys. |
 | `label_direction`                  | string       | `"normal"`               | `"normal"` or `"reverse"`, see [Choosing a label direction](#choosing-a-label-direction). Overridable per app and with `neru hints --label-direction`      |
 | `max_depth`                        | int          | `50`                     | Deepest accessibility tree level to read, `0` for unlimited                                                                                                               |
 | `include_menubar_hints`            | bool         | `false`                  | Show hints on menubar items                                                                                                                                |
@@ -522,10 +528,50 @@ notification cards and toasts.
 | `square_icon_size`    | float | `40.0`  | A roughly square parent smaller than this keeps its box and drops its inner detail      |
 | `square_icon_slack`   | float | `5.0`   | How far from square (width minus height) that parent may be                             |
 
+### Choosing hint keys and label order
+
+Alternating labels use these groups, in the order shown:
+
+| Hand | Primary keys | Secondary keys |
+| ---- | ------------ | -------------- |
+| Left | `asdf` | `zxcvwerg` |
+| Right | `jklp` | `uionm,.h` |
+
+Other keys are excluded when `alternate_hands` is `true`. With `first_hand =
+"left"`, every label starts on the left and continues right, left, right. With
+`"right"` the sequence starts right, left, right, left. With `"both"`, each label
+can start on either hand and keeps alternating thereafter.
+
+With `alternate_hands = false`, labels use `hint_characters`; only their first
+character is restricted by `first_hand`. QWERTY left keys are `qwertasdfgzxcvb`,
+and right keys are `yuiophjklnm,.`. Custom characters remain available after the
+first character, and can start labels when `first_hand = "both"`. `AA` is
+excluded unless `allow_repeated_keys = true`; different keys on the same hand,
+such as `AS`, are always allowed in this mode.
+
+`length_first` preserves short labels and prefers primary keys among equal
+lengths. `priority_first` can replace a primary single-character label with
+longer labels that start with that key before using a secondary starting key.
+For example, it may use `AJ` and `AK` before `Z`. This can require more
+keystrokes. It expands primary starting keys within the current required
+length tier, then uses secondary starting keys before moving to a longer tier.
+For two-character labels, both orders rank primary/primary, primary/secondary,
+secondary/primary, then secondary/secondary key pairs. All orders keep labels
+unique and free of prefix collisions, so
+`A` and `AJ` are never active together. These options apply on startup and
+after `neru config reload`.
+
 ### Choosing a label direction
 
 `label_direction` sets how multi-character labels are enumerated once
-single-character labels run out. With `asdf` and 5 elements:
+single-character labels run out. `normal` mixes label lengths, while `reverse`
+spreads first characters across the available keys. With `length_first`,
+`reverse` uses a uniform length; `priority_first` can use different lengths
+for the primary and secondary starting-key groups.
+The hand and repeated-key rules apply in either direction. For the historical
+sequence below, set `alternate_hands = false`, `first_hand = "both"`,
+`allow_repeated_keys = true`, `label_order = "length_first"`, and
+`hint_characters = "asdf"`, with 5 elements:
 
 | Direction          | Sequence         | Notes                                                                              |
 | ------------------ | ---------------- | ---------------------------------------------------------------------------------- |

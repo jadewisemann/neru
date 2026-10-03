@@ -165,8 +165,8 @@ func registerOppositeLabelDirectionGenerator(
 		return
 	}
 
-	oppositeGen, oppositeGenErr := domainHint.NewAlphabetGenerator(
-		cfg.Hints.HintCharacters,
+	oppositeGen, oppositeGenErr := newHintGenerator(
+		cfg.Hints,
 		oppositeDirection,
 	)
 	if oppositeGenErr != nil {
@@ -178,8 +178,6 @@ func registerOppositeLabelDirectionGenerator(
 
 		return
 	}
-
-	oppositeGen.UpdateAlternateHands(cfg.Hints.AlternateHands)
 
 	hintService.UpdateGenerator(app.ctx, oppositeGen)
 

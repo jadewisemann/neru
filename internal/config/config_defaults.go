@@ -443,13 +443,16 @@ func defaultHotkeys() HotkeysConfig {
 
 func defaultHints() HintsConfig {
 	return HintsConfig{
-		Enabled:        true,
-		Strategy:       domain.StrategyAXTree,
-		CaptureScope:   domain.CaptureScopeWindow,
-		HintCharacters: "asdfghjkl",
-		AlternateHands: false, // Keep existing labels unless hand alternation is enabled.
-		LabelDirection: domain.LabelDirectionNormal,
-		MaxDepth:       DefaultMaxDepth,
+		Enabled:           true,
+		Strategy:          domain.StrategyAXTree,
+		CaptureScope:      domain.CaptureScopeWindow,
+		HintCharacters:    "asdfzxcvwergjklpuionm,.h",
+		AlternateHands:    true,
+		FirstHand:         FirstHandLeft,
+		AllowRepeatedKeys: false, // Never repeat the same key consecutively by default.
+		LabelOrder:        LabelOrderLengthFirst,
+		LabelDirection:    domain.LabelDirectionNormal,
+		MaxDepth:          DefaultMaxDepth,
 		Hotkeys: map[string]StringOrStringArray{
 			KeyDisplayEscape:    {CmdIdle},
 			"/":                 {"action search_hints"},

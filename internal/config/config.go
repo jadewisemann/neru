@@ -446,6 +446,9 @@ type HintsConfig struct {
 	CaptureScope      string              `json:"captureScope"      toml:"capture_scope"`
 	HintCharacters    string              `json:"hintCharacters"    toml:"hint_characters"`
 	AlternateHands    bool                `json:"alternateHands"    toml:"alternate_hands"`
+	FirstHand         string              `json:"firstHand"         toml:"first_hand"`
+	AllowRepeatedKeys bool                `json:"allowRepeatedKeys" toml:"allow_repeated_keys"`
+	LabelOrder        string              `json:"labelOrder"        toml:"label_order"`
 	LabelDirection    string              `json:"labelDirection"    toml:"label_direction"`
 	MaxDepth          int                 `json:"maxDepth"          toml:"max_depth"`
 	UI                HintsUI             `json:"ui"                toml:"ui"`

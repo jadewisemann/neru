@@ -122,6 +122,7 @@ func (c *Config) ValidateHints(warnings *Warnings) error {
 	checks := []func() error{
 		func() error { return c.validateHintClickableRoles(warnings) },
 		c.validateHintCharacters,
+		func() error { return c.validateHintLabelOptions(warnings) },
 		c.validateHintColors,
 		c.validateHintLabelUI,
 		c.validateHintSearchInputGeometry,
@@ -139,6 +140,56 @@ func (c *Config) ValidateHints(warnings *Warnings) error {
 		if checkErr != nil {
 			return checkErr
 		}
+	}
+
+	return nil
+}
+
+// validateHintLabelOptions checks label ordering and the hand used to start a
+// label. Empty values follow the defaults, as the other hint enums do.
+func (c *Config) validateHintLabelOptions(warnings *Warnings) error {
+	switch c.Hints.FirstHand {
+	case FirstHandLeft, FirstHandRight, FirstHandBoth, "":
+	default:
+		return derrors.New(derrors.CodeInvalidConfig,
+			"hints.first_hand must be \"left\", \"right\", or \"both\"")
+	}
+
+	switch c.Hints.LabelOrder {
+	case LabelOrderLengthFirst, LabelOrderPriorityFirst, "":
+	default:
+		return derrors.New(derrors.CodeInvalidConfig,
+			"hints.label_order must be \"length_first\" or \"priority_first\"")
+	}
+
+	if c.Hints.AlternateHands {
+		if c.Hints.AllowRepeatedKeys {
+			warnings.Addf("hints.allow_repeated_keys is ignored when hints.alternate_hands is true")
+		}
+
+		return nil
+	}
+
+	var firstKeys string
+
+	switch c.Hints.FirstHand {
+	case FirstHandLeft, "":
+		firstKeys = "qwertasdfgzxcvb"
+	case FirstHandRight:
+		firstKeys = "yuiophjklnm,."
+	default:
+		return nil
+	}
+
+	if !strings.ContainsAny(strings.ToLower(c.Hints.HintCharacters), firstKeys) {
+		firstHand := c.Hints.FirstHand
+		if firstHand == "" {
+			firstHand = FirstHandLeft
+		}
+
+		return derrors.Newf(derrors.CodeInvalidConfig,
+			"hints.hint_characters must include a %s hand key for hints.first_hand",
+			firstHand)
 	}
 
 	return nil

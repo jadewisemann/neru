@@ -76,8 +76,11 @@ text = "#E8EEFF"
 enabled = true
 strategy = "axtree"                         # axtree, vision, contour
 capture_scope = "window"                    # window, screen
-hint_characters = "asdfghjkl"
-alternate_hands = false                     # Alternate QWERTY left/right hand keys in hint labels
+hint_characters = "asdfzxcvwergjklpuionm,.h" # Used when alternate_hands is false
+alternate_hands = true                      # Alternate left/right hands on every character
+first_hand = "left"                         # left, right, both
+allow_repeated_keys = false                 # Allow AA; ignored when alternate_hands is true
+label_order = "length_first"                # length_first, priority_first
 label_direction = "normal"                  # normal, reverse
 max_depth = 50                              # 0 = unlimited
 include_menubar_hints = false

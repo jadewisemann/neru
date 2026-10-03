@@ -700,7 +700,7 @@ func TestSimulation_HintsSearchJourney(t *testing.T) {
 // two-character labels; a first keystroke narrows the drawn set, and the
 // full label still lands the cursor on an element.
 func TestSimulation_HintsTwoCharLabels(t *testing.T) {
-	elements := manyButtons(t, 12)
+	elements := manyButtons(t, 20)
 	sim := newSimHarness(t, simConfig(), elements)
 
 	sim.pressHotkey(hintsHotkey)
@@ -712,7 +712,7 @@ func TestSimulation_HintsTwoCharLabels(t *testing.T) {
 		t.Fatalf("expected %d labels, got %d", len(elements), len(labels))
 	}
 
-	// With 9 hint characters and 12 elements the generator must overflow into
+	// With 12 starting keys and 20 elements the generator must overflow into
 	// multi-character labels for the tail of the set.
 	label := ""
 
@@ -2282,7 +2282,7 @@ text_color = %q
 // and ordering work on the main thread; doing that per keystroke is the
 // latency regression AGENTS.md forbids.
 func TestSimulation_HintsNarrowingRedrawsWithoutShowingAgain(t *testing.T) {
-	elements := manyButtons(t, 12)
+	elements := manyButtons(t, 20)
 	sim := newSimHarness(t, simConfig(), elements)
 
 	sim.pressHotkey(hintsHotkey)

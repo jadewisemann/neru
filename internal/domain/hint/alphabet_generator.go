@@ -134,6 +134,7 @@ type AlphabetGenerator struct {
 	uppercaseRuneMap map[rune]rune
 	labelDirection   LabelDirection
 	alternateHands   bool
+	handPolicy       *handPolicy
 }
 
 // NewAlphabetGenerator creates a new alphabet-based hint generator.
@@ -267,6 +268,10 @@ func (g *AlphabetGenerator) MaxHints() int {
 
 // Characters returns the character set used for hint generation.
 func (g *AlphabetGenerator) Characters() string {
+	if g.handPolicy != nil {
+		return string(g.handPolicy.characters)
+	}
+
 	if g.alternateHands {
 		return alternatingCharacters
 	}
@@ -304,6 +309,8 @@ func (g *AlphabetGenerator) UpdateLabelDirection(direction LabelDirection) {
 // and a right-hand alphabet at odd depths. Disabling it restores the configured
 // hint character set and the original three-character capacity.
 func (g *AlphabetGenerator) UpdateAlternateHands(enabled bool) {
+	g.handPolicy = nil
+
 	g.alternateHands = enabled
 	if !enabled {
 		n := len(g.uppercaseChars)
@@ -372,11 +379,25 @@ func (g *AlphabetGenerator) Update(characters string, direction LabelDirection) 
 	n := charCount
 	maxHints := n * n * n
 
+	var policy *handPolicy
+
+	if g.handPolicy != nil {
+		var err error
+
+		policy, err = newHandPolicy(uppercaseChars, g.handPolicy.options)
+		if err != nil {
+			return err
+		}
+
+		maxHints = policy.capacity(len(policy.roots))
+	}
+
 	g.characters = uppercaseChars
 	g.uppercaseChars = uppercaseChars
 	g.maxHints = maxHints
 	g.uppercaseRuneMap = uppercaseRuneMap
 	g.labelDirection = direction
+	g.handPolicy = policy
 
 	if g.alternateHands {
 		g.UpdateAlternateHands(true)
@@ -415,7 +436,9 @@ func (g *AlphabetGenerator) generateLabels(count int) []string {
 	}
 
 	cacheKey := g.uppercaseChars + ":" + g.labelDirection.String() + ":" + strconv.Itoa(count)
-	if g.alternateHands {
+	if g.handPolicy != nil {
+		cacheKey += g.handPolicy.cacheKey()
+	} else if g.alternateHands {
 		cacheKey += ":alternate"
 	}
 
@@ -474,6 +497,10 @@ func (g *AlphabetGenerator) generateLabels(count int) []string {
 // It dispatches to the reverse or normal algorithm based on the configured
 // label direction.
 func (g *AlphabetGenerator) computeLabels(count int) []string {
+	if g.handPolicy != nil {
+		return g.handPolicy.labels(count, g.labelDirection)
+	}
+
 	chars := []rune(g.uppercaseChars)
 	numChars := len(g.alphabetForDepth(0, chars))
 	labels := make([]string, 0, count)
